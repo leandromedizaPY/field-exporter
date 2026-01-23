@@ -58,6 +58,9 @@ type Reconciler struct {
 //+kubebuilder:rbac:groups=redis.cnrm.cloud.google.com,resources=*,verbs=get;list;watch
 //+kubebuilder:rbac:groups=sql.cnrm.cloud.google.com,resources=*,verbs=get;list;watch
 //+kubebuilder:rbac:groups=storage.cnrm.cloud.google.com,resources=*,verbs=get;list;watch
+//+kubebuilder:rbac:groups=rds.services.k8s.aws,resources=*,verbs=get;list;watch
+//+kubebuilder:rbac:groups=elasticache.services.k8s.aws,resources=*,verbs=get;list;watch
+//+kubebuilder:rbac:groups=dynamodb.services.k8s.aws,resources=*,verbs=get;list;watch
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
