@@ -79,39 +79,21 @@ var _ = Describe("ResourceFieldExport controller", func() {
 	Context("for existing source resource (GCP)", func() {
 		When("creating a field export", func() {
 			It("should succeed", func() {
-				ctx := context.Background()
-				rfe := &gdpv1alpha1.ResourceFieldExport{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: testNamespace,
-					},
-					Spec: gdpv1alpha1.ResourceFieldExportSpec{
-						From: gdpv1alpha1.ResourceRef{
-							APIVersion: redisv1beta1.RedisInstanceGVK.GroupVersion().String(),
-							Kind:       redisv1beta1.RedisInstanceGVK.Kind,
-							Name:       "redis-instance",
-						},
-						To: gdpv1alpha1.DestinationRef{
-							Type: gdpv1alpha1.ConfigMap,
-							Name: "target-cm",
-						},
-						Outputs: []gdpv1alpha1.Output{
-							{
-								Key:  "display-name",
-								Path: ".spec.displayName",
-							},
-						},
+				from := gdpv1alpha1.ResourceRef{
+					APIVersion: redisv1beta1.RedisInstanceGVK.GroupVersion().String(),
+					Kind:       redisv1beta1.RedisInstanceGVK.Kind,
+					Name:       "redis-instance",
+				}
+				outputs := []gdpv1alpha1.Output{
+					{
+						Key:  "display-name",
+						Path: ".spec.displayName",
 					},
 				}
-				Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
-
-				Eventually(func() string {
-					ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
-					defer cancelFunc()
-					cm := &corev1.ConfigMap{}
-					Expect(k8sClient.Get(ctx, cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)).Should(Succeed())
-					return cm.Data["display-name"]
-				}, "10s").Should(Equal("test-0001-testdb-default"))
+				expectedData := map[string]string{
+					"display-name": "test-0001-testdb-default",
+				}
+				testSuccessfulFieldExport(testNamespace, "test", from, outputs, expectedData)
 			})
 		})
 
@@ -198,41 +180,26 @@ var _ = Describe("ResourceFieldExport controller", func() {
 
 		When("creating a field export for an AWS DBCluster resource", func() {
 			It("should succeed and populate the target with cluster endpoints", func() {
-				ctx := context.Background()
-				rfe := &gdpv1alpha1.ResourceFieldExport{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-aws-cluster",
-						Namespace: testNamespace,
+				from := gdpv1alpha1.ResourceRef{
+					APIVersion: "rds.services.k8s.aws/v1alpha1",
+					Kind:       "DBCluster",
+					Name:       "aws-db-cluster",
+				}
+				outputs := []gdpv1alpha1.Output{
+					{
+						Key:  "cluster-writer-endpoint",
+						Path: ".status.endpoint",
 					},
-					Spec: gdpv1alpha1.ResourceFieldExportSpec{
-						From: gdpv1alpha1.ResourceRef{
-							APIVersion: "rds.services.k8s.aws/v1alpha1",
-							Kind:       "DBCluster",
-							Name:       "aws-db-cluster",
-						},
-						To: gdpv1alpha1.DestinationRef{
-							Type: gdpv1alpha1.ConfigMap,
-							Name: "target-cm",
-						},
-						Outputs: []gdpv1alpha1.Output{
-							{
-								Key:  "cluster-writer-endpoint",
-								Path: ".status.endpoint",
-							},
-							{
-								Key:  "cluster-reader-endpoint",
-								Path: ".status.readerEndpoint",
-							},
-						},
+					{
+						Key:  "cluster-reader-endpoint",
+						Path: ".status.readerEndpoint",
 					},
 				}
-				Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
-
-				Eventually(func() map[string]string {
-					cm := &corev1.ConfigMap{}
-					_ = k8sClient.Get(context.Background(), cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)
-					return cm.Data
-				}, "10s").Should(HaveKeyWithValue("cluster-writer-endpoint", "my-cluster-writer.cluster-random.us-east-1.rds.amazonaws.com"))
+				expectedData := map[string]string{
+					"cluster-writer-endpoint": "my-cluster-writer.cluster-random.us-east-1.rds.amazonaws.com",
+					"cluster-reader-endpoint": "my-cluster-reader.cluster-random.us-east-1.rds.amazonaws.com",
+				}
+				testSuccessfulFieldExport(testNamespace, "test-aws-cluster", from, outputs, expectedData)
 			})
 		})
 	})
@@ -272,45 +239,27 @@ var _ = Describe("ResourceFieldExport controller", func() {
 			Expect(k8sClient.Status().Update(ctx, awsDbInstance)).Should(Succeed())
 		})
 
-		When("creating a field export for an AWS resource", func() {
+		When("creating a field export for an RDS resource", func() {
 			It("should succeed and populate the target", func() {
-				ctx := context.Background()
-				rfe := &gdpv1alpha1.ResourceFieldExport{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-aws",
-						Namespace: testNamespace,
-					},
-					Spec: gdpv1alpha1.ResourceFieldExportSpec{
-						From: gdpv1alpha1.ResourceRef{
-							APIVersion: "rds.services.k8s.aws/v1alpha1",
-							Kind:       "DBInstance",
-							Name:       "aws-db-instance",
-						},
-						To: gdpv1alpha1.DestinationRef{
-							Type: gdpv1alpha1.ConfigMap,
-							Name: "target-cm",
-						},
-						Outputs: []gdpv1alpha1.Output{
-							{
-								Key:  "db-endpoint",
-								Path: ".status.endpoint.address",
-							},
-						},
+				from := gdpv1alpha1.ResourceRef{
+					APIVersion: "rds.services.k8s.aws/v1alpha1",
+					Kind:       "DBInstance",
+					Name:       "aws-db-instance",
+				}
+				outputs := []gdpv1alpha1.Output{
+					{
+						Key:  "db-endpoint",
+						Path: ".status.endpoint.address",
 					},
 				}
-				Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
-
-				Eventually(func() string {
-					ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
-					defer cancelFunc()
-					cm := &corev1.ConfigMap{}
-					Expect(k8sClient.Get(ctx, cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)).Should(Succeed())
-					return cm.Data["db-endpoint"]
-				}, "10s").Should(Equal("my-aws-db.random-chars.us-east-1.rds.amazonaws.com"))
+				expectedData := map[string]string{
+					"db-endpoint": "my-aws-db.random-chars.us-east-1.rds.amazonaws.com",
+				}
+				testSuccessfulFieldExport(testNamespace, "test-aws", from, outputs, expectedData)
 			})
 		})
 
-		When("creating a field export for an AWS resource with required conditions", func() {
+		When("creating a field export for an RDS resource with required conditions", func() {
 			It("should succeed when conditions are met", func() {
 				ctx := context.Background()
 
@@ -445,39 +394,21 @@ var _ = Describe("ResourceFieldExport controller", func() {
 
 		When("creating a field export for an AWS DynamoDB resource", func() {
 			It("should succeed and populate the target", func() {
-				ctx := context.Background()
-				rfe := &gdpv1alpha1.ResourceFieldExport{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-aws-dynamodb",
-						Namespace: testNamespace,
-					},
-					Spec: gdpv1alpha1.ResourceFieldExportSpec{
-						From: gdpv1alpha1.ResourceRef{
-							APIVersion: "dynamodb.services.k8s.aws/v1alpha1",
-							Kind:       "Table",
-							Name:       "aws-dynamodb-table",
-						},
-						To: gdpv1alpha1.DestinationRef{
-							Type: gdpv1alpha1.ConfigMap,
-							Name: "target-cm",
-						},
-						Outputs: []gdpv1alpha1.Output{
-							{
-								Key:  "table-arn",
-								Path: ".status.ackResourceMetadata.arn",
-							},
-						},
+				from := gdpv1alpha1.ResourceRef{
+					APIVersion: "dynamodb.services.k8s.aws/v1alpha1",
+					Kind:       "Table",
+					Name:       "aws-dynamodb-table",
+				}
+				outputs := []gdpv1alpha1.Output{
+					{
+						Key:  "table-arn",
+						Path: ".status.ackResourceMetadata.arn",
 					},
 				}
-				Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
-
-				Eventually(func() string {
-					ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
-					defer cancelFunc()
-					cm := &corev1.ConfigMap{}
-					Expect(k8sClient.Get(ctx, cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)).Should(Succeed())
-					return cm.Data["table-arn"]
-				}, "10s").Should(Equal("arn:aws:dynamodb:us-west-2:123456789012:table/aws-dynamodb-table"))
+				expectedData := map[string]string{
+					"table-arn": "arn:aws:dynamodb:us-west-2:123456789012:table/aws-dynamodb-table",
+				}
+				testSuccessfulFieldExport(testNamespace, "test-aws-dynamodb", from, outputs, expectedData)
 			})
 		})
 	})
@@ -528,40 +459,49 @@ var _ = Describe("ResourceFieldExport controller", func() {
 
 		When("creating a field export for an AWS ElastiCache resource", func() {
 			It("should succeed and populate the target", func() {
-				ctx := context.Background()
-				rfe := &gdpv1alpha1.ResourceFieldExport{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-aws-elasticache",
-						Namespace: testNamespace,
-					},
-					Spec: gdpv1alpha1.ResourceFieldExportSpec{
-						From: gdpv1alpha1.ResourceRef{
-							APIVersion: "elasticache.services.k8s.aws/v1alpha1",
-							Kind:       "ReplicationGroup",
-							Name:       "aws-elasticache-rg",
-						},
-						To: gdpv1alpha1.DestinationRef{
-							Type: gdpv1alpha1.ConfigMap,
-							Name: "target-cm",
-						},
-						Outputs: []gdpv1alpha1.Output{
-							{
-								Key:  "redis-endpoint",
-								Path: ".status.nodeGroups[0].primaryEndpoint.address",
-							},
-						},
+				from := gdpv1alpha1.ResourceRef{
+					APIVersion: "elasticache.services.k8s.aws/v1alpha1",
+					Kind:       "ReplicationGroup",
+					Name:       "aws-elasticache-rg",
+				}
+				outputs := []gdpv1alpha1.Output{
+					{
+						Key:  "redis-endpoint",
+						Path: ".status.nodeGroups[0].primaryEndpoint.address",
 					},
 				}
-				Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
-
-				Eventually(func() string {
-					ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
-					defer cancelFunc()
-					cm := &corev1.ConfigMap{}
-					Expect(k8sClient.Get(ctx, cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)).Should(Succeed())
-					return cm.Data["redis-endpoint"]
-				}, "10s").Should(Equal("my-elasticache-rg.random-chars.us-east-1.cache.amazonaws.com"))
+				expectedData := map[string]string{
+					"redis-endpoint": "my-elasticache-rg.random-chars.us-east-1.cache.amazonaws.com",
+				}
+				testSuccessfulFieldExport(testNamespace, "test-aws-elasticache", from, outputs, expectedData)
 			})
 		})
 	})
 })
+
+func testSuccessfulFieldExport(testNamespace, rfeName string, from gdpv1alpha1.ResourceRef, outputs []gdpv1alpha1.Output, expectedData map[string]string) {
+	ctx := context.Background()
+	rfe := &gdpv1alpha1.ResourceFieldExport{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      rfeName,
+			Namespace: testNamespace,
+		},
+		Spec: gdpv1alpha1.ResourceFieldExportSpec{
+			From: from,
+			To: gdpv1alpha1.DestinationRef{
+				Type: gdpv1alpha1.ConfigMap,
+				Name: "target-cm",
+			},
+			Outputs: outputs,
+		},
+	}
+	Expect(k8sClient.Create(ctx, rfe)).Should(Succeed())
+
+	for key, value := range expectedData {
+		Eventually(func() string {
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(context.Background(), cr.ObjectKey{Namespace: testNamespace, Name: "target-cm"}, cm)).Should(Succeed())
+			return cm.Data[key]
+		}, "10s").Should(Equal(value))
+	}
+}
