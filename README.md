@@ -70,7 +70,7 @@ The controller can also update a `Secret`.
 
 For ACK resources, it is recommended to wait for the resource to be synced before exporting fields. This can be achieved by requiring the `ACK.ResourceSynced` condition to be `True`.
 
-Here is an example of exporting the endpoint from an rds.services.k8s.aws DBInstance into a Secret:
+Here is an example of exporting the endpoint from an rds.services.k8s.aws DBCluster into a Secret:
 
 ```yaml
 apiVersion: gdp.deliveryhero.io/v1alpha1
